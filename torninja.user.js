@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torninja
 // @namespace    https://github.com/sqlinjected/torninja
-// @version      0.1
+// @version      0.2
 // @description  A draggable ninja war partner for Torn City.
 // @author       sqlinjected
 // @match        https://www.torn.com/*
@@ -40,7 +40,7 @@
   let box = document.createElement('div');
   box.id = 'torninja';
   box.innerHTML = `<div id="tn-b"></div><div id="tn-n">${svg}</div>
-<div id="tn-p"><b>Torninja v0.1</b><br><br>
+<div id="tn-p"><b>Torninja v0.2</b><br><br>
 API key<input id="tn-key" type="password">
 Enemy faction ID<input id="tn-fac">
 Chain alert (seconds)<input id="tn-chain" type="number">
@@ -92,30 +92,3 @@ Chain alert (seconds)<input id="tn-chain" type="number">
     drag = { sx: e.clientX, sy: e.clientY, ox: e.clientX - box.offsetLeft, oy: e.clientY - box.offsetTop, moved: false };
     ninja.setPointerCapture(e.pointerId);
   };
-  ninja.onpointermove = e => {
-    if (!drag) return;
-    if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) drag.moved = true;
-    if (drag.moved) move(e.clientX - drag.ox, e.clientY - drag.oy);
-  };
-  ninja.onpointerup = () => {
-    if (!drag) return;
-    if (drag.moved) GM_setValue('pos', { x: box.offsetLeft, y: box.offsetTop });
-    else {
-      if (!audio) audio = new AudioContext();
-      audio.resume();
-      panel.style.display = panel.style.display == 'block' ? 'none' : 'block';
-    }
-    drag = null;
-  };
-
-  document.getElementById('tn-save').onclick = () => {
-    cfg.apiKey = document.getElementById('tn-key').value.trim();
-    cfg.enemyFaction = document.getElementById('tn-fac').value.trim();
-    cfg.chainSeconds = +document.getElementById('tn-chain').value || 60;
-    GM_setValue('settings', cfg);
-    say('saved');
-  };
-  document.getElementById('tn-test').onclick = () => say('chain under 60s!!');
-
-  addEventListener('resize', () => move(box.offsetLeft, box.offsetTop));
-})();
