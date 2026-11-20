@@ -22,32 +22,34 @@
   let cfg = GM_getValue('settings', { apiKey: '', enemyFaction: '', chainSeconds: 60 });
   let pos = GM_getValue('pos', { x: 20, y: 120 });
 
-  let s = document.createElement('style');
-  s.textContent = `
+  let style = document.createElement('style');
+  style.textContent = `
 #torninja{position:fixed;z-index:999999;width:56px;height:56px;user-select:none}
 #tn-n{width:100%;height:100%;cursor:grab;touch-action:none}
 #tn-n svg{width:100%;height:100%;display:block}
 .jump{animation:jump .4s 3}
 @keyframes jump{50%{transform:translateY(-14px)}}
-#tn-b{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:10px;background:#fff;color:#23233a;border:2px solid #23233a;border-radius:6px;padding:4px 8px;font:bold 12px sans-serif;white-space:nowrap}
-#tn-p{display:none;position:absolute;top:100%;left:0;margin-top:6px;width:200px;background:#1f1f2e;color:#eee;border:1px solid #444;border-radius:6px;padding:10px;font:12px sans-serif}
+#tn-b{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:10px;
+  background:#fff;color:#23233a;border:2px solid #23233a;border-radius:6px;padding:4px 8px;font:bold 12px sans-serif;white-space:nowrap}
+#tn-p{display:none;position:absolute;top:100%;left:0;margin-top:6px;width:200px;
+  background:#1f1f2e;color:#eee;border:1px solid #444;border-radius:6px;padding:10px;font:12px sans-serif}
 #tn-p input{width:100%;box-sizing:border-box;margin:2px 0 6px;padding:4px;background:#2b2b40;color:#fff;border:1px solid #555;border-radius:4px}
 #tn-p button{margin:6px 4px 0 0;padding:4px 10px;background:#d84a3f;color:#fff;border:0;border-radius:4px;cursor:pointer}`;
-  document.head.append(s);
+  document.head.append(style);
 
   let box = document.createElement('div');
   box.id = 'torninja';
   box.innerHTML = `<div id="tn-b"></div><div id="tn-n">${svg}</div>
 <div id="tn-p"><b>Torninja v0.1</b><br><br>
 API key<input id="tn-key" type="password">
-Enemy faction<input id="tn-fac">
-Chain alert (sec)<input id="tn-chain" type="number">
+Enemy faction ID<input id="tn-fac">
+Chain alert (seconds)<input id="tn-chain" type="number">
 <button id="tn-save">Save</button><button id="tn-test">Test</button></div>`;
   document.body.append(box);
 
   let ninja = document.getElementById('tn-n');
   let bubble = document.getElementById('tn-b');
-  let p = document.getElementById('tn-p');
+  let panel = document.getElementById('tn-p');
   document.getElementById('tn-key').value = cfg.apiKey;
   document.getElementById('tn-fac').value = cfg.enemyFaction;
   document.getElementById('tn-chain').value = cfg.chainSeconds;
@@ -58,16 +60,16 @@ Chain alert (sec)<input id="tn-chain" type="number">
   }
   move(pos.x, pos.y);
 
-  let ac;
+  let audio;
   function beep() {
-    if (!ac) return;
+    if (!audio) return;
     [780, 1040].forEach((f, i) => {
-      let o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * 0.18;
+      let o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime + i * 0.18;
       o.type = 'square';
       o.frequency.value = f;
       g.gain.setValueAtTime(0.15, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-      o.connect(g).connect(ac.destination);
+      o.connect(g).connect(audio.destination);
       o.start(t);
       o.stop(t + 0.16);
     });
@@ -85,18 +87,35 @@ Chain alert (sec)<input id="tn-chain" type="number">
     ninja.classList.add('jump');
   }
 
-  let d = null;
+  let drag = null;
   ninja.onpointerdown = e => {
-    d = { sx: e.clientX, sy: e.clientY, ox: e.clientX - box.offsetLeft, oy: e.clientY - box.offsetTop, moved: false };
+    drag = { sx: e.clientX, sy: e.clientY, ox: e.clientX - box.offsetLeft, oy: e.clientY - box.offsetTop, moved: false };
     ninja.setPointerCapture(e.pointerId);
   };
   ninja.onpointermove = e => {
-    if (!d) return;
-    if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 4) d.moved = true;
-    if (d.moved) move(e.clientX - d.ox, e.clientY - d.oy);
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) drag.moved = true;
+    if (drag.moved) move(e.clientX - drag.ox, e.clientY - drag.oy);
   };
   ninja.onpointerup = () => {
-    if (!d) return;
-    if (d.moved) GM_setValue('pos', { x: box.offsetLeft, y: box.offsetTop });
+    if (!drag) return;
+    if (drag.moved) GM_setValue('pos', { x: box.offsetLeft, y: box.offsetTop });
     else {
-      if (!ac) ac = new
+      if (!audio) audio = new AudioContext();
+      audio.resume();
+      panel.style.display = panel.style.display == 'block' ? 'none' : 'block';
+    }
+    drag = null;
+  };
+
+  document.getElementById('tn-save').onclick = () => {
+    cfg.apiKey = document.getElementById('tn-key').value.trim();
+    cfg.enemyFaction = document.getElementById('tn-fac').value.trim();
+    cfg.chainSeconds = +document.getElementById('tn-chain').value || 60;
+    GM_setValue('settings', cfg);
+    say('saved');
+  };
+  document.getElementById('tn-test').onclick = () => say('chain under 60s!!');
+
+  addEventListener('resize', () => move(box.offsetLeft, box.offsetTop));
+})();
