@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torninja
 // @namespace    https://github.com/sqlinjected/torninja
-// @version      0.3
+// @version      0.4
 // @description  A draggable ninja war partner for Torn City.
 // @author       sqlinjected
 // @match        https://www.torn.com/*
@@ -40,7 +40,7 @@
   let box = document.createElement('div');
   box.id = 'torninja';
   box.innerHTML = `<div id="tn-b"></div><div id="tn-n">${svg}</div>
-<div id="tn-p"><b>Torninja v0.3</b><br><br>
+<div id="tn-p"><b>Torninja v0.4</b><br><br>
 API key<input id="tn-key" type="password">
 Enemy faction ID<input id="tn-fac">
 Chain alert (seconds)<input id="tn-chain" type="number">
@@ -123,11 +123,12 @@ Hosp alert (seconds)<input id="tn-hosp" type="number">
   document.getElementById('tn-test').onclick = () => say('chain under 60s!!');
 
   let chainEnd = 0, chainCount = 0, warned = false, lastErr = '';
+  let myState = '', myUntil = 0, meWarned = 0;
 
   async function check() {
     if (!cfg.apiKey) return;
     try {
-      let r = await fetch('https://api.torn.com/user/?selections=bars&key=' + cfg.apiKey);
+      let r = await fetch('https://api.torn.com/user/?selections=bars,profile&key=' + cfg.apiKey);
       let data = await r.json();
       if (data.error) {
         if (data.error.error != lastErr) say('api: ' + data.error.error);
@@ -137,6 +138,8 @@ Hosp alert (seconds)<input id="tn-hosp" type="number">
       lastErr = '';
       chainCount = data.chain.current;
       chainEnd = data.chain.timeout > 0 ? Date.now() + data.chain.timeout * 1000 : 0;
+      myState = data.status.state;
+      myUntil = (myState == 'Hospital' || myState == 'Jail') ? data.status.until * 1000 : 0;
     } catch (e) {}
   }
   check();
@@ -186,6 +189,16 @@ Hosp alert (seconds)<input id="tn-hosp" type="number">
       }
     }
     if (soon.length) say(soon.join(', ') + ' - out of hosp!');
+  }, 1000);
+
+  setInterval(() => {
+    if (myUntil) {
+      let left = Math.round((myUntil - Date.now()) / 1000);
+      if (left <= (cfg.hospSeconds || 30) && left > -5 && meWarned != myUntil) {
+        meWarned = myUntil;
+        say('out of ' + myState.toLowerCase() + ' in ' + Math.max(left, 0) + 's');
+      }
+    }
   }, 1000);
 
   addEventListener('resize', () => move(box.offsetLeft, box.offsetTop));
