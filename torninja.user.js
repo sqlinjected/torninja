@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torninja
 // @namespace    https://github.com/sqlinjected/torninja
-// @version      0.4
+// @version      0.5
 // @description  A draggable ninja war partner for Torn City.
 // @author       sqlinjected
 // @match        https://www.torn.com/*
@@ -40,7 +40,7 @@
   let box = document.createElement('div');
   box.id = 'torninja';
   box.innerHTML = `<div id="tn-b"></div><div id="tn-n">${svg}</div>
-<div id="tn-p"><b>Torninja v0.4</b><br><br>
+<div id="tn-p"><b>Torninja v0.5</b><br><br>
 API key<input id="tn-key" type="password">
 Enemy faction ID<input id="tn-fac">
 Chain alert (seconds)<input id="tn-chain" type="number">
@@ -123,12 +123,12 @@ Hosp alert (seconds)<input id="tn-hosp" type="number">
   document.getElementById('tn-test').onclick = () => say('chain under 60s!!');
 
   let chainEnd = 0, chainCount = 0, warned = false, lastErr = '';
-  let myState = '', myUntil = 0, meWarned = 0;
+  let myState = '', myUntil = 0, meWarned = 0, landAt = 0, dest = '', landWarned = 0;
 
   async function check() {
     if (!cfg.apiKey) return;
     try {
-      let r = await fetch('https://api.torn.com/user/?selections=bars,profile&key=' + cfg.apiKey);
+      let r = await fetch('https://api.torn.com/user/?selections=bars,profile,travel&key=' + cfg.apiKey);
       let data = await r.json();
       if (data.error) {
         if (data.error.error != lastErr) say('api: ' + data.error.error);
@@ -140,6 +140,8 @@ Hosp alert (seconds)<input id="tn-hosp" type="number">
       chainEnd = data.chain.timeout > 0 ? Date.now() + data.chain.timeout * 1000 : 0;
       myState = data.status.state;
       myUntil = (myState == 'Hospital' || myState == 'Jail') ? data.status.until * 1000 : 0;
+      landAt = data.travel.time_left > 0 ? data.travel.timestamp * 1000 : 0;
+      dest = data.travel.destination;
     } catch (e) {}
   }
   check();
@@ -198,6 +200,10 @@ Hosp alert (seconds)<input id="tn-hosp" type="number">
         meWarned = myUntil;
         say('out of ' + myState.toLowerCase() + ' in ' + Math.max(left, 0) + 's');
       }
+    }
+    if (landAt && Date.now() >= landAt && landWarned != landAt) {
+      landWarned = landAt;
+      say('landed in ' + dest + '!');
     }
   }, 1000);
 
