@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torninja
 // @namespace    https://github.com/sqlinjected/torninja
-// @version      0.2
+// @version      0.3
 // @description  A draggable ninja war partner for Torn City.
 // @author       sqlinjected
 // @match        https://www.torn.com/*
@@ -19,7 +19,7 @@
   <path fill="#3b3b58" d="M4 8h1v1h-1zM11 8h1v1h-1z"/>
 </svg>`;
 
-  let cfg = GM_getValue('settings', { apiKey: '', enemyFaction: '', chainSeconds: 60 });
+  let cfg = GM_getValue('settings', { apiKey: '', enemyFaction: '', chainSeconds: 60, hospSeconds: 30 });
   let pos = GM_getValue('pos', { x: 20, y: 120 });
 
   let style = document.createElement('style');
@@ -40,10 +40,11 @@
   let box = document.createElement('div');
   box.id = 'torninja';
   box.innerHTML = `<div id="tn-b"></div><div id="tn-n">${svg}</div>
-<div id="tn-p"><b>Torninja v0.2</b><br><br>
+<div id="tn-p"><b>Torninja v0.3</b><br><br>
 API key<input id="tn-key" type="password">
 Enemy faction ID<input id="tn-fac">
 Chain alert (seconds)<input id="tn-chain" type="number">
+Hosp alert (seconds)<input id="tn-hosp" type="number">
 <button id="tn-save">Save</button><button id="tn-test">Test</button></div>`;
   document.body.append(box);
 
@@ -53,6 +54,7 @@ Chain alert (seconds)<input id="tn-chain" type="number">
   document.getElementById('tn-key').value = cfg.apiKey;
   document.getElementById('tn-fac').value = cfg.enemyFaction;
   document.getElementById('tn-chain').value = cfg.chainSeconds;
+  document.getElementById('tn-hosp').value = cfg.hospSeconds || 30;
 
   function move(x, y) {
     box.style.left = Math.max(0, Math.min(x, innerWidth - 56)) + 'px';
@@ -92,3 +94,99 @@ Chain alert (seconds)<input id="tn-chain" type="number">
     drag = { sx: e.clientX, sy: e.clientY, ox: e.clientX - box.offsetLeft, oy: e.clientY - box.offsetTop, moved: false };
     ninja.setPointerCapture(e.pointerId);
   };
+  ninja.onpointermove = e => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) drag.moved = true;
+    if (drag.moved) move(e.clientX - drag.ox, e.clientY - drag.oy);
+  };
+  ninja.onpointerup = () => {
+    if (!drag) return;
+    if (drag.moved) GM_setValue('pos', { x: box.offsetLeft, y: box.offsetTop });
+    else {
+      if (!audio) audio = new AudioContext();
+      audio.resume();
+      panel.style.display = panel.style.display == 'block' ? 'none' : 'block';
+    }
+    drag = null;
+  };
+
+  document.getElementById('tn-save').onclick = () => {
+    cfg.apiKey = document.getElementById('tn-key').value.trim();
+    cfg.enemyFaction = document.getElementById('tn-fac').value.trim();
+    cfg.chainSeconds = +document.getElementById('tn-chain').value || 60;
+    cfg.hospSeconds = +document.getElementById('tn-hosp').value || 30;
+    GM_setValue('settings', cfg);
+    say('saved');
+    check();
+    checkEnemies();
+  };
+  document.getElementById('tn-test').onclick = () => say('chain under 60s!!');
+
+  let chainEnd = 0, chainCount = 0, warned = false, lastErr = '';
+
+  async function check() {
+    if (!cfg.apiKey) return;
+    try {
+      let r = await fetch('https://api.torn.com/user/?selections=bars&key=' + cfg.apiKey);
+      let data = await r.json();
+      if (data.error) {
+        if (data.error.error != lastErr) say('api: ' + data.error.error);
+        lastErr = data.error.error;
+        return;
+      }
+      lastErr = '';
+      chainCount = data.chain.current;
+      chainEnd = data.chain.timeout > 0 ? Date.now() + data.chain.timeout * 1000 : 0;
+    } catch (e) {}
+  }
+  check();
+  setInterval(check, 15000);
+
+  setInterval(() => {
+    if (!chainEnd || chainCount < 10) return;
+    let left = Math.round((chainEnd - Date.now()) / 1000);
+    if (left > cfg.chainSeconds) warned = false;
+    else if (left > 0 && !warned) {
+      warned = true;
+      say('chain ' + chainCount + ' - ' + left + 's left!');
+    }
+  }, 1000);
+
+  let enemies = {}, hospWarned = {};
+
+  async function checkEnemies() {
+    if (!cfg.apiKey || !cfg.enemyFaction) return;
+    try {
+      let r = await fetch('https://api.torn.com/faction/' + cfg.enemyFaction + '?selections=basic&key=' + cfg.apiKey);
+      let data = await r.json();
+      if (data.error) {
+        if (data.error.error != lastErr) say('api: ' + data.error.error);
+        lastErr = data.error.error;
+        return;
+      }
+      enemies = {};
+      for (let id in data.members) {
+        let m = data.members[id];
+        if (m.status.state == 'Hospital') enemies[id] = { name: m.name, until: m.status.until * 1000 };
+      }
+    } catch (e) {}
+  }
+  checkEnemies();
+  setInterval(checkEnemies, 30000);
+
+  setInterval(() => {
+    let soon = [];
+    for (let id in enemies) {
+      let e = enemies[id];
+      let left = Math.round((e.until - Date.now()) / 1000);
+      let key = id + ':' + e.until;
+      if (left <= (cfg.hospSeconds || 30) && left > -5 && !hospWarned[key]) {
+        hospWarned[key] = true;
+        soon.push(e.name + ' ' + Math.max(left, 0) + 's');
+      }
+    }
+    if (soon.length) say(soon.join(', ') + ' - out of hosp!');
+  }, 1000);
+
+  addEventListener('resize', () => move(box.offsetLeft, box.offsetTop));
+})();
